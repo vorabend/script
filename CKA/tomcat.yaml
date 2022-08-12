@@ -1,0 +1,16 @@
+apiVersion: v1  #pod属于k8s核心组v1
+kind: Pod  #创建的是一个Pod资源
+metadata:  #元数据
+  name: demo-pod  #pod名字
+  namespace: default  #pod所属的名称空间
+  labels:
+    app: myapp  #pod具有的标签
+    env: dev      #pod具有的标签
+spec:
+  containers:      #定义一个容器，容器是对象列表，下面可以有多个name
+  - name:  tomcat-pod-java  #容器的名字
+    ports:
+    - containerPort: 8080
+    image: tomcat:8.5-jre8-alpine   #容器使用的镜像
+    imagePullPolicy: IfNotPresent
+
