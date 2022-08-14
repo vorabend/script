@@ -10,6 +10,45 @@ function check ()
   fi
 }
 
+cat > /etc/hosts<<END
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.106.11 master1
+192.168.106.12 master2
+192.168.106.13 master3
+192.168.106.21 node1
+192.168.106.22 node2
+192.168.106.23 node3
+END
+check "配置主机hosts文件"
+
+yum install -y yum-utils device-mapper-persistent-data lvm2 wget net-tools nfs-utils lrzsz gcc gcc-c++ make cmake libxml2-devel openssl-devel curl curl-devel unzip sudo ntp libaio-devel  vim ncurses-devel autoconf automake zlib-devel  python-devel epel-release openssh-server socat  ipvsadm conntrack ntpdate telnet ipvsadm bash-completion rsync expect &>>/dev/null
+check "安装基础软件包"
+
+expect <<EOF &>>/dev/null
+    set timeout 10 
+    spawn ssh-keygen
+    expect { 
+        "(/root/.ssh/id_rsa):" { send "\n";exp_continue } 
+        "(empty for no passphrase):" { send "\n";exp_continue }
+        "again:" { send "\n";exp_continue }
+    } 
+EOF
+check "生成公私匙文件"
+
+for i in master1 master2 master3 node1 node2 node3
+do
+expect <<EOF &>>/dev/null
+    set timeout 10 
+    spawn ssh-copy-id $i
+    expect { 
+        "(yes/no)?" { send "yes\n";exp_continue } 
+        "password:" { send "1\n";exp_continue }
+    } 
+EOF
+done
+check "配置主机间的免密登录"
+
 swapoff -a &>>/dev/null
 sed -i 's/\/dev\/mapper\/centos-swap/#\/dev\/mapper\/centos-swap/' /etc/fstab &>>/dev/null
 check "关闭swap分区"
@@ -36,7 +75,7 @@ yum install -y yum-utils &>>/dev/null
 yum-config-manager \
 --add-repo \
 https://download.docker.com/linux/centos/docker-ce.repo &>>/dev/null
-check "配置repo源"
+check "配置docker repo源"
 
 yum install chrony -y &>>/dev/null
 sed -i 's/^server.*//' /etc/chrony.conf &>>/dev/null
@@ -60,8 +99,6 @@ if [ `lsmod | grep ip_vs | wc -l` == 0 ]
 fi &>>/dev/null
 check "开启ipvs"
 
-yum install -y yum-utils device-mapper-persistent-data lvm2 wget net-tools nfs-utils lrzsz gcc gcc-c++ make cmake libxml2-devel openssl-devel curl curl-devel unzip sudo ntp libaio-devel  vim ncurses-devel autoconf automake zlib-devel  python-devel epel-release openssh-server socat  ipvsadm conntrack ntpdate telnet ipvsadm bash-completion rsync &>>/dev/null
-check "安装基础软件包"
 
 yum install iptables-services -y &>>/dev/null
 systemctl disable iptables --now &>>/dev/null
@@ -82,7 +119,7 @@ cat > /etc/docker/daemon.json<<END
   "exec-opts": ["native.cgroupdriver=systemd"]
 }
 END
-systemctl enable docker --now && systemctl status docker &>>/dev/null
+systemctl enable docker --now &>>/dev/null && systemctl status docker &>>/dev/null
 check "安装与配置docker"
 
 pvcreate /dev/sdb &>>/dev/null
@@ -90,6 +127,3 @@ vgextend centos /dev/sdb &>>/dev/null
 lvextend -l +100%FREE /dev/mapper/centos-root &>>/dev/null
 xfs_growfs /dev/mapper/centos-root &>>/dev/null
 check "进行根分区扩容"
-
-
-
