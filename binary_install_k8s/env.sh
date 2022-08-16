@@ -127,3 +127,42 @@ vgextend centos /dev/sdb &>>/dev/null
 lvextend -l +100%FREE /dev/mapper/centos-root &>>/dev/null
 xfs_growfs /dev/mapper/centos-root &>>/dev/null
 check "进行根分区扩容"
+
+#创建目录
+if [ `hostname` == master1 ]
+then
+mkdir -p /etc/etcd/ssl
+mkdir /data/work -p
+mkdir -p /var/lib/etcd/default.etcd
+mkdir -p /etc/kubernetes/ssl
+mkdir /var/log/kubernetes 
+mkdir ~/.kube -p
+fi
+
+if [ `hostname` == master2 ]
+then
+mkdir -p /etc/etcd/ssl
+mkdir -p /var/lib/etcd/default.etcd
+mkdir -p /etc/kubernetes/ssl
+mkdir /var/log/kubernetes
+mkdir ~/.kube -p
+fi
+
+if [ `hostname` == master3 ]
+then
+mkdir -p /etc/etcd/ssl
+mkdir -p /var/lib/etcd/default.etcd
+mkdir -p /etc/kubernetes/ssl
+mkdir /var/log/kubernetes
+mkdir ~/.kube -p
+fi
+
+if [[ `hostname` == node? ]]
+then
+mkdir /etc/kubernetes/ssl -p
+mkdir /var/lib/kubelet
+mkdir /var/log/kubernetes
+mkdir -p /var/lib/kube-proxy
+fi
+check "创建组件目录"
+

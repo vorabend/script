@@ -13,12 +13,9 @@ fi
 #部署etcd服务（master）
 function deploy_etcd ()
 {
-mkdir -p /etc/etcd && mkdir -p /etc/etcd/ssl
-check "创建ectd工作目录"
 
 IP_LOCAL=`ip  a s| grep eth0 | grep inet | awk {'print $2'}|awk -F "/" {'print $1'}`
 HOST_NAME_NUM=`cat /etc/hostname | awk -F "r" {'print $2'}`
-mkdir -p /var/lib/etcd/default.etcd
 cat > /etc/etcd/etcd.conf<<END
 #[Member]
 ETCD_NAME="etcd$HOST_NAME_NUM"
@@ -84,10 +81,6 @@ check "启动etcd服务"
 #部署api-server（master）
 function deploy_apiserver ()
 {
-mkdir -p /etc/kubernetes/ 
-mkdir -p /etc/kubernetes/ssl
-mkdir /var/log/kubernetes
-check "创建kubernetes目录"
 
 cat  > /etc/kubernetes/kube-apiserver.conf <<END
 KUBE_APISERVER_OPTS="--enable-admission-plugins=NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \\
@@ -160,7 +153,6 @@ if [  `hostname` == master1 ]
 then 
 cd /data/work
 kubectl create clusterrolebinding kube-apiserver:kubelet-apis --clusterrole=system:kubelet-api-admin --user kubernetes
-kubectl create clusterrolebinding kubelet-bootstrap --clusterrole=system:node-bootstrapper --user=kubelet-bootstrap
 else
 echo 666
 fi &>>/dev/null
@@ -180,8 +172,8 @@ check 	"配置kubectl子命令补全"
 function deploy_controller_manager ()
 {
 cat > /etc/kubernetes/kube-controller-manager.conf <<END
-KUBE_CONTROLLER_MANAGER_OPTS="--port=0 \\
-  --secure-port=10252 \\
+KUBE_CONTROLLER_MANAGER_OPTS=" \\
+  --secure-port=10253 \\
   --bind-address=127.0.0.1 \\
   --kubeconfig=/etc/kubernetes/kube-controller-manager.kubeconfig \\
   --service-cluster-ip-range=10.255.0.0/16 \\
@@ -263,10 +255,6 @@ check "启动kube-scheduler服务"
 #部署kubelet服务（node）
 function deploy_kubelet ()
 {
-mkdir /etc/kubernetes
-mkdir /var/lib/kubelet
-mkdir /var/log/kubernetes
-mkdir /etc/kubernetes/ssl
 cat > /etc/kubernetes/kubelet.json <<END
 {
   "kind": "KubeletConfiguration",
@@ -364,7 +352,7 @@ mode: "ipvs"
 END
 check "创建kube-proxy配置文件"
 
-mkdir -p /var/lib/kube-proxy
+
 cat > /usr/lib/systemd/system/kube-proxy.service  <<END
 [Unit]
 Description=Kubernetes Kube-Proxy Server

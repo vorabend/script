@@ -171,5 +171,6 @@ END
 chmod +x /etc/keepalived/check_nginx.sh
 check "配置check_nginx存活性检测"
 
+
 systemctl  enable keepalived --now && systemctl status keepalived
 check "启动keepalived服务"

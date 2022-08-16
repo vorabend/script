@@ -250,7 +250,6 @@ check "启动kube-scheduler服务"
 #部署kubelet服务（node）
 function deploy_kubelet ()
 {
-mkdir /var/lib/kubelet
 wget https://dl.k8s.io/v1.20.7/kubernetes-server-linux-amd64.tar.gz &>>/dev/null
 tar -xf kubernetes-server-linux-amd64.tar.gz
 cd kubernetes/server/bin/
@@ -398,4 +397,5 @@ check "导入docker calico镜像"
 deploy_kubelet
 deploy_proxy
 deploy_calico
-grep -r 6443 /etc/kubernetes/ | awk -F ":" {'print $1'} | xargs sed -i  "s/192.168.106.11:6443/192.168.106.100:16443/" systemctl restart kubelet kube-proxy && systemctl status  kubelet kube-proxy
+
+grep -r 6443 /etc/kubernetes/ | awk -F ":" {'print $1'} | xargs sed -i  "s/192.168.106.11:6443/192.168.106.100:16443/" 

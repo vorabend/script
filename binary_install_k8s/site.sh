@@ -27,9 +27,16 @@ for i in 21 22 23
 do
 	sshpass -p1 ssh 192.168.106.$i "bash binary_install_k8s/deploy_module_node.sh"
 done
+kubectl create clusterrolebinding kubelet-bootstrap --clusterrole=system:node-bootstrapper --user=kubelet-bootstrap
+sshpass -p1 ssh 192.168.106.11 "for i in `kubectl get csr | grep node | awk {'print $1'}`; do kubectl certificate approve $i;done"
+
 
 sshpass -p1 ssh 192.168.106.11 "kubectl apply -f binary_install_k8s/software_config/coredns.yaml"
 sshpass -p1 ssh 192.168.106.11 "kubectl apply -f binary_install_k8s/software_config/calico.yaml"
 sshpass -p1 ssh 192.168.106.11 "bash binary_install_k8s/deploy_keepalived_nginx.sh"
 sshpass -p1 ssh 192.168.106.12 "bash binary_install_k8s/deploy_keepalived_nginx.sh"
 
+for i in 21 22 23
+do
+	        sshpass -p1 ssh 192.168.106.$i "systemctl restart kubelet kube-proxy && systemctl status  kubelet kube-proxy"
+done

@@ -1,5 +1,6 @@
 #!/bin/bash
 PASSWD=Aa792548841..
+
 function check ()
 {
   if [ $? == 0 ]
@@ -11,13 +12,6 @@ function check ()
   fi
 }
 
-
-mkdir -p /data/work
-ssh master1 "mkdir -p /etc/etcd && mkdir -p /etc/etcd/ssl" &>>/dev/null
-ssh master2 "mkdir -p /etc/etcd && mkdir -p /etc/etcd/ssl" &>>/dev/null
-ssh master3 "mkdir -p /etc/etcd && mkdir -p /etc/etcd/ssl" &>>/dev/null
-check "创建生成工作目录"
-
 cd /data/work
 wget https://dl.k8s.io/v1.20.7/kubernetes-server-linux-amd64.tar.gz &>>/dev/null
 tar xvf  kubernetes-server-linux-amd64.tar.gz  &>>/dev/null
@@ -27,18 +21,23 @@ scp kube-apiserver kubectl kube-scheduler kube-controller-manager master2:/usr/l
 scp kube-apiserver kubectl kube-scheduler kube-controller-manager master3:/usr/local/bin/ &>>/dev/null
 check "下载kubectl、kube-apiserver、kube-scheduler、kube-controller-manager二进制安装包"
 
+scp kubelet kube-proxy node1:/usr/local/bin/ &>>/dev/null
+scp kubelet kube-proxy node2:/usr/local/bin/ &>>/dev/null
+scp kubelet kube-proxy node3:/usr/local/bin/ &>>/dev/null
+check "拷贝kubelet、kube-proxy拷贝到node节点"
+
 expect <<END &>>/dev/null
 set time 30
 spawn scp 192.168.88.88:/root/script/binary_install_k8s/software_config/cfssl/* /data/work 
 expect {
 "*yes/no" { send "yes\r"; exp_continue }
-"*password:" { send "$PASSWD\r" }
+"*password:" { send "Aa792548841..\r" }
 }
 expect eof
 END
 check "从主机上安装证书所需文件"
 
-chmod +x /data/work/*
+chmod +x /data/work/cfssl*
 mv /data/work/cfssl_linux-amd64 /usr/local/bin/cfssl &>>/dev/null
 mv /data/work/cfssl-certinfo_linux-amd64 /usr/bin/cfssl-certinfo &>>/dev/null
 mv /data/work/cfssljson_linux-amd64 /usr/local/bin/cfssljson &>>/dev/null
@@ -67,6 +66,10 @@ cat > /data/work/ca-csr.json<<END
 END
 check "配置ca证书请求文件"
 
+cd /data/work
+cfssl gencert -initca ca-csr.json  | cfssljson -bare ca &>>/dev/null
+check "生成ca证书pem与key"
+
 cat > /data/work/ca-config.json<<END
 {
   "signing": {
@@ -89,9 +92,6 @@ cat > /data/work/ca-config.json<<END
 END
 check "配置ca证书配置文件"
 
-cd /data/work
-cfssl gencert -initca ca-csr.json  | cfssljson -bare ca &>>/dev/null
-check "生成ca证书pem与key"
 
 cat > /data/work/etcd-csr.json<<END
 {
@@ -124,10 +124,16 @@ cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kube
 check "生成etcd证书"
 
 cp /data/work/ca*.pem /etc/etcd/ssl/
-cp etcd*.pem /etc/etcd/ssl/
+cp /data/work/etcd*.pem /etc/etcd/ssl/
 scp  /etc/etcd/ssl/*  master2:/etc/etcd/ssl/ &>>/dev/null
 scp  /etc/etcd/ssl/*  master3:/etc/etcd/ssl/ &>>/dev/null
 check "拷贝证书到指定位置、拷贝证书到master节点的指定位置"
+
+cd /data/work/
+cat > token.csv << EOF
+$(head -c 16 /dev/urandom | od -An -t x | tr -d ' '),kubelet-bootstrap,10001,"system:kubelet-bootstrap"
+EOF
+check "创建token.csv文件"
 
 cat > /data/work/kube-apiserver-csr.json <<END
 {
@@ -169,14 +175,17 @@ cd /data/work
 cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-apiserver-csr.json | cfssljson -bare kube-apiserver &>>/dev/null
 check "生成kube-apiserver证书"
 
-ssh master1 "mkdir -p /etc/kubernetes/ssl" &>>/dev/null
-ssh master2 "mkdir -p /etc/kubernetes/ssl" &>>/dev/null
-ssh master3 "mkdir -p /etc/kubernetes/ssl" &>>/dev/null
+
 cp /data/work/ca*.pem /etc/kubernetes/ssl &>>/dev/null
 cp /data/work/kube-apiserver*.pem /etc/kubernetes/ssl &>>/dev/null
+cp /data/work/token.csv /etc/kubernetes/
 scp /etc/kubernetes/ssl/* master2:/etc/kubernetes/ssl/ &>>/dev/null
 scp /etc/kubernetes/ssl/* master3:/etc/kubernetes/ssl/ &>>/dev/null
 check "拷贝kube-apiserver证书到指定文件夹及拷贝到其他master节点"
+
+scp /etc/kubernetes/token.csv master2:/etc/kubernetes/ &>>/dev/null
+scp /etc/kubernetes/token.csv master3:/etc/kubernetes/ &>>/dev/null
+check "创建token.csv拷贝到mster2与master3节点"
 
 cat > /data/work/admin-csr.json <<END
 {
@@ -204,8 +213,8 @@ cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kube
 check "创建kubectl证书文件"
 
 cp /data/work/admin*.pem /etc/kubernetes/ssl/ &>>/dev/null
-scp /etc/kubernetes/ssl/* master2:/etc/kubernetes/ssl/ &>>/dev/null
-scp /etc/kubernetes/ssl/* master3:/etc/kubernetes/ssl/ &>>/dev/null
+scp /etc/kubernetes/ssl/admin*.pem master2:/etc/kubernetes/ssl/ &>>/dev/null
+scp /etc/kubernetes/ssl/admin*.pem master3:/etc/kubernetes/ssl/ &>>/dev/null
 check "拷贝kubectl证书到指定文件夹及拷贝到其他master节点"
 
 cd /data/work
@@ -213,13 +222,11 @@ kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-cer
 kubectl config set-credentials admin --client-certificate=admin.pem --client-key=admin-key.pem --embed-certs=true --kubeconfig=kube.config &>>/dev/null
 kubectl config set-context kubernetes --cluster=kubernetes --user=admin --kubeconfig=kube.config &>>/dev/null
 kubectl config use-context kubernetes --kubeconfig=kube.config &>>/dev/null
-mkdir ~/.kube -p
 cp /data/work/kube.config ~/.kube/config
 check "创建kubeconfig配置文件"
 
 
-ssh master2 "mkdir /root/.kube/"
-ssh master3 "mkdir /root/.kube/"
+
 scp /root/.kube/config master2:~/.kube/  
 scp /root/.kube/config master3:~/.kube/
 check "拷贝证书到master2与master3节点"
@@ -315,12 +322,7 @@ scp /data/work/kube-scheduler*.pem master2:/etc/kubernetes/ssl/ &>>/dev/null
 scp /data/work/kube-scheduler*.pem master3:/etc/kubernetes/ssl/ &>>/dev/null
 check "拷贝kube-scheduler证书到指定文件夹及拷贝到其他master节点"
 
-cat > /etc/kubernetes/token.csv <<END
-$(head -c 16 /dev/urandom | od -An -t x | tr -d ' '),kubelet-bootstrap,10001,"system:kubelet-bootstrap"
-END
-scp /etc/kubernetes/token.csv master2:/etc/kubernetes/ &>>/dev/null
-scp /etc/kubernetes/token.csv master3:/etc/kubernetes/ &>>/dev/null
-check "创建token.csv拷贝到mster2与master3节点"
+
 
 cd /data/work/
 BOOTSTRAP_TOKEN=$(awk -F "," '{print $1}' /etc/kubernetes/token.csv)
@@ -330,9 +332,7 @@ kubectl config set-context default --cluster=kubernetes --user=kubelet-bootstrap
 kubectl config use-context default --kubeconfig=kubelet-bootstrap.kubeconfig &>>/dev/null
 check "创建kubelet-bootstrap.kubeconfig"
 
-ssh node1 "mkdir -p /etc/kubernetes/ssl" &>>/dev/null
-ssh node2 "mkdir -p /etc/kubernetes/ssl" &>>/dev/null
-ssh node3 "mkdir -p /etc/kubernetes/ssl" &>>/dev/null
+
 scp /data/work/kubelet-bootstrap.kubeconfig node1:/etc/kubernetes/ &>>/dev/null
 scp /data/work/kubelet-bootstrap.kubeconfig node2:/etc/kubernetes/ &>>/dev/null
 scp /data/work/kubelet-bootstrap.kubeconfig node3:/etc/kubernetes/ &>>/dev/null
