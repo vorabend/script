@@ -166,3 +166,6 @@ mkdir -p /var/lib/kube-proxy
 fi
 check "创建组件目录"
 
+ehco "bash /etc/sysconfig/modules/ipvs.modules" >> /etc/rc.d/rc.local 
+chmod u+x /etc/rc.d/rc.local
+
